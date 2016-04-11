@@ -1,0 +1,18 @@
+web:
+  build: .
+  working_dir: /go/src/github.com/eventials/frodo
+  command: dockerize -wait tcp://broker:5672 go run server.go -cache "cache:6379" -broker "amqp://guest:guest@broker:5672/"
+  links:
+   - broker
+   - cache
+  ports:
+   - "3000:3000"
+  volumes:
+   - .:/go/src/github.com/eventials/frodo
+  hostname: frodo
+cache:
+  image: redis:3.0
+broker:
+  image: rabbitmq:3.6-management
+  ports:
+   - "15672:15672"
