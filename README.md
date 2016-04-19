@@ -55,3 +55,9 @@ there's a default value for each option.
 | Broker URL   | -broker | FRODO_BROKER | `amqp://` |
 | Broker Queue | -queue  | FRODO_QUEUE  | `frodo`   |
 | Cache URL    | -cache  | FRODO_CACHE  | `:6379`   |
+
+## Building Docker Image
+
+Just run `docker build -t username/imagename -f ./Dockerfile.build`.
+
+To publish run `docker push username/imagename`.
