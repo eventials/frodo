@@ -30,6 +30,8 @@ type Client interface {
 
 type EventSource interface {
     Channels() []string                // Returns all opened channels name, or an empty array if none open.
+    GetLastMessage(channel string) (string, bool)
+    SetLastMessage(channel, message string)
     ChannelExists(channel string) bool // Returns true if a channel exists, false otherwise.
     CloseChannel(channel string)       // Closes an especific channel and all clients in it.
     CloseChannels()                    // Closes all channels and clients.
@@ -38,6 +40,14 @@ type EventSource interface {
     SendMessage(channel, message string) // Broadcast message to all clients in a channel.
     ConnectionCount() int                // Returns the connection count in Event Source.
     Shutdown()                           // Performs a graceful shutdown of Event Source.
+}
+
+type Settings struct {
+    AllowCors bool
+    OnClientConnect func (EventSource, Client)
+    OnClientDisconnect func (EventSource, Client)
+    OnChannelCreate func (EventSource, string)
+    OnChannelClose func (EventSource, string)
 }
 
 type client struct {
@@ -53,13 +63,13 @@ type eventMessage struct {
 
 type eventSource struct {
     channels map[string]map[*client]bool
+    lastMessage map[string]string
     addClient chan *client
     removeClient chan *client
     sendMessage chan *eventMessage
     shutdown chan bool
     closeChannel chan string
-    onClientConnect func (Client)
-    onClientDisconnect func (Client)
+    settings Settings
 }
 
 func getIP(request *http.Request) string {
@@ -93,16 +103,16 @@ func (c *client) IP() string {
 }
 
 // NewEventSource creates a new Event Source.
-func NewEventSource(onClientConnect, onClientDisconnect func (Client)) EventSource {
+func NewEventSource(settings Settings) EventSource {
     es := &eventSource{
         make(map[string]map[*client]bool),
+        make(map[string]string),
         make(chan *client),
         make(chan *client),
         make(chan *eventMessage),
         make(chan bool),
         make(chan string),
-        onClientConnect,
-        onClientDisconnect,
+        settings,
     }
 
     go es.dispatch()
@@ -138,6 +148,10 @@ func (es *eventSource) ServeHTTP(response http.ResponseWriter, request *http.Req
     h.Set("Cache-Control", "no-cache")
     h.Set("Connection", "keep-alive")
 
+    if es.settings.AllowCors {
+        h.Set("Access-Control-Allow-Origin", "*")
+    }
+
     for {
         msg := <-c.send
         fmt.Fprintf(response, "data: %s\n\n", msg)
@@ -166,6 +180,15 @@ func (es *eventSource) Channels() []string {
     }
 
     return channels
+}
+
+func (es *eventSource) GetLastMessage(channel string) (string, bool) {
+    msg, ok := es.lastMessage[channel]
+    return msg, ok
+}
+
+func (es *eventSource) SetLastMessage(channel, message string) {
+    es.lastMessage[channel] = message
 }
 
 // Channels returns true if a channel exists, false otherwise.
@@ -224,13 +247,17 @@ func (es *eventSource) dispatch() {
                 ch = make(map[*client]bool)
                 es.channels[c.channel] = ch
                 log.Printf("New channel '%s' created.\n", c.channel)
+
+                if es.settings.OnChannelCreate != nil {
+                    es.settings.OnChannelCreate(es, c.channel)
+                }
             }
 
             ch[c] = true
             log.Printf("Client '%s' connected to channel '%s'.\n", c.ip, c.channel)
 
-            if es.onClientConnect != nil {
-                es.onClientConnect(c)
+            if es.settings.OnClientConnect != nil {
+                es.settings.OnClientConnect(es, c)
             }
 
         // Client disconnected.
@@ -245,18 +272,24 @@ func (es *eventSource) dispatch() {
                 if len(ch) == 0 {
                     delete(es.channels, c.channel)
                     log.Printf("Channel '%s' has no clients. Channel closed.\n", c.channel)
+
+                    if es.settings.OnChannelClose != nil {
+                        es.settings.OnChannelClose(es, c.channel)
+                    }
                 }
             }
 
             close(c.send)
 
-            if es.onClientDisconnect != nil {
-                es.onClientDisconnect(c)
+            if es.settings.OnClientDisconnect != nil {
+                es.settings.OnClientDisconnect(es, c)
             }
 
         // Broadcast message to all clients in channel.
         case msg := <- es.sendMessage:
             if ch, ok := es.channels[msg.channel]; ok {
+                es.SetLastMessage(msg.channel, msg.message)
+
                 for c, open := range ch {
                     if open {
                         c.send <- msg.message
@@ -272,6 +305,7 @@ func (es *eventSource) dispatch() {
         case channel := <- es.closeChannel:
             if ch, exists := es.channels[channel]; exists {
                 delete(es.channels, channel)
+                delete(es.lastMessage, channel)
 
                 // Kick all clients of this channel.
                 for c, _ := range ch {

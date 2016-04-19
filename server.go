@@ -29,7 +29,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
     fmt.Fprint(w, "Frodo")
 }
 
-func run(cacheUrl, brokerUrl, brokerQueue, bindAddress string) {
+func run(allowCors bool, cacheUrl, brokerUrl, brokerQueue, bindAddress string) {
     cache, err := storage.NewStorage(cacheUrl)
 
     if err != nil {
@@ -48,13 +48,21 @@ func run(cacheUrl, brokerUrl, brokerQueue, bindAddress string) {
     log.Println("Connected to broker.")
     defer b.Close()
 
-    es := sse.NewEventSource(func (c sse.Client) {
-        // When a client connect for the first time,
-        // we send the last message.
-        if msg, err := cache.Get(c.Channel()); err == nil {
-            c.SendMessage(msg)
-        }
-    }, nil)
+    es := sse.NewEventSource(sse.Settings{
+        AllowCors: allowCors,
+        OnClientConnect: func (es sse.EventSource, c sse.Client) {
+            // When a client connect for the first time, we send the last message.
+            if msg, ok := es.GetLastMessage(c.Channel()); ok {
+                c.SendMessage(msg)
+            }
+        },
+        OnChannelCreate: func (es sse.EventSource, channelName string) {
+            // Load the last message from cache to memory.
+            if msg, err := cache.Get(channelName); err == nil {
+                es.SetLastMessage(channelName, msg)
+            }
+        },
+    })
 
     defer es.Shutdown()
 
@@ -118,6 +126,7 @@ func defaultValue(a, b string) string {
 }
 
 func main() {
+    allowCors := flag.Bool("cors", os.Getenv("FRODO_CORS") == "true", "Allow CORS.")
     cacheUrl := flag.String("cache", defaultValue(os.Getenv("FRODO_CACHE"), ":6379"), "Cache URL.")
     brokerUrl := flag.String("broker", defaultValue(os.Getenv("FRODO_BROKER"), "amqp://"), "Broker URL.")
     brokerQueue := flag.String("queue", defaultValue(os.Getenv("FRODO_QUEUE"), "frodo"), "Broker Queue.")
@@ -125,5 +134,5 @@ func main() {
 
     flag.Parse()
 
-    run(*cacheUrl, *brokerUrl, *brokerQueue, *bindAddress)
+    run(*allowCors, *cacheUrl, *brokerUrl, *brokerQueue, *bindAddress)
 }
