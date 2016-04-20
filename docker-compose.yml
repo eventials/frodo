@@ -1,12 +1,16 @@
 web:
   build: .
   working_dir: /go/src/github.com/eventials/frodo
-  command: dockerize -wait tcp://broker:5672 -timeout 60 go run server.go -cache "cache:6379" -broker "amqp://guest:guest@broker:5672/"
+  command: dockerize -wait tcp://broker:5672 -timeout 60s go run server.go
   links:
    - broker
    - cache
   ports:
    - "3000:3000"
+  environment:
+    FRODO_CORS: 'true'
+    FRODO_BROKER: amqp://guest:guest@broker:5672/
+    FRODO_CACHE: redis://cache:6379/0
   volumes:
    - .:/go/src/github.com/eventials/frodo
   hostname: frodo

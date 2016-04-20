@@ -16,10 +16,11 @@ type Storage interface {
 
 type storage struct {
     connection redis.Conn
+    keyTTL int
 }
 
-func NewStorage(address string) (Storage, error) {
-    c, err := redis.Dial("tcp", address)
+func NewStorage(address string, keyTTL int) (Storage, error) {
+    c, err := redis.DialURL(address)
 
     if err != nil {
         return nil, err
@@ -27,6 +28,7 @@ func NewStorage(address string) (Storage, error) {
 
     return &storage{
         c,
+        keyTTL,
     }, nil
 }
 
@@ -47,5 +49,10 @@ func (s *storage) HasKey(key string) bool {
 
 func (s *storage) Set(key, value string) {
     log.Printf("Setting key '%s' to cache.", key)
-    s.connection.Do("SET", key, value)
+
+    if s.keyTTL == 0 {
+        s.connection.Do("SET", key, value)
+    } else {
+        s.connection.Do("SETEX", key, s.keyTTL, value)
+    }
 }

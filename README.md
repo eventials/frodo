@@ -1,4 +1,5 @@
-# Frodo
+# Frodo [![Build Status](https://travis-ci.org/eventials/frodo.svg?branch=master)](https://travis-ci.org/eventials/frodo) [![GoDoc](https://godoc.org/github.com/eventials/frodo?status.svg)](http://godoc.org/github.com/eventials/frodo)
+
 
 Event Source Multiplexer
 
@@ -48,10 +49,17 @@ There's two ways to configure things, thought command line argumens or environme
 Command line arguments are priority if set, if not use environment variables, and if none available,
 there's a default value for each option.
 
-| Option       | CL Argument | Env Var  | Default   |
-|:-------------|:--------|:-------------|:----------|
-| Allow CORS   | -cors   | FRODO_CORS   | `false`   |
-| Bind Address | -bind   | FRODO_BIND   | `:3000`   |
-| Broker URL   | -broker | FRODO_BROKER | `amqp://` |
-| Broker Queue | -queue  | FRODO_QUEUE  | `frodo`   |
-| Cache URL    | -cache  | FRODO_CACHE  | `:6379`   |
+| Option       | CL Argument | Env Var  | Default                    |
+|:-------------|:--------|:-------------|:---------------------------|
+| Allow CORS   | -cors   | FRODO_CORS   | `false`                    |
+| Bind Address | -bind   | FRODO_BIND   | `:3000`                    |
+| Broker URL   | -broker | FRODO_BROKER | `amqp://`                  |
+| Broker Queue | -queue  | FRODO_QUEUE  | `frodo`                    |
+| Cache URL    | -cache  | FRODO_CACHE  | `redis://127.0.0.1:6379/0` |
+| Cache TTL    | -ttl    | FRODO_TTL    | `60` seconds                |
+
+## Building Docker Image
+
+Just run `docker build -t username/imagename -f ./Dockerfile.build`.
+
+To publish run `docker push username/imagename`.
