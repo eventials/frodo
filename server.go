@@ -7,6 +7,7 @@ import (
     "log"
     "net/http"
     "os"
+    "strconv"
 
     "github.com/gorilla/mux"
 
@@ -29,8 +30,8 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
     fmt.Fprint(w, "Frodo")
 }
 
-func run(allowCors bool, cacheUrl, brokerUrl, brokerQueue, bindAddress string) {
-    cache, err := storage.NewStorage(cacheUrl)
+func run(allowCors bool, cacheTTL int, cacheUrl, brokerUrl, brokerQueue, bindAddress string) {
+    cache, err := storage.NewStorage(cacheUrl, cacheTTL)
 
     if err != nil {
         log.Fatalf("Can't connect to storage: %s", err)
@@ -126,13 +127,21 @@ func defaultValue(a, b string) string {
 }
 
 func main() {
+    var ttl int64
+    var err error
+
+    if ttl, err = strconv.ParseInt(defaultValue(os.Getenv("FRODO_TTL"), "60"), 10, 64); err != nil {
+        ttl = 60
+    }
+
     allowCors := flag.Bool("cors", os.Getenv("FRODO_CORS") == "true", "Allow CORS.")
-    cacheUrl := flag.String("cache", defaultValue(os.Getenv("FRODO_CACHE"), ":6379"), "Cache URL.")
+    cacheUrl := flag.String("cache", defaultValue(os.Getenv("FRODO_CACHE"), "redis://127.0.0.1:6379/0"), "Cache URL.")
+    cacheTTL := flag.Int("ttl", int(ttl), "Cache TTL in seconds.")
     brokerUrl := flag.String("broker", defaultValue(os.Getenv("FRODO_BROKER"), "amqp://"), "Broker URL.")
     brokerQueue := flag.String("queue", defaultValue(os.Getenv("FRODO_QUEUE"), "frodo"), "Broker Queue.")
     bindAddress := flag.String("bind", defaultValue(os.Getenv("FRODO_BIND"), ":3000"), "Bind Address.")
 
     flag.Parse()
 
-    run(*allowCors, *cacheUrl, *brokerUrl, *brokerQueue, *bindAddress)
+    run(*allowCors, *cacheTTL, *cacheUrl, *brokerUrl, *brokerQueue, *bindAddress)
 }

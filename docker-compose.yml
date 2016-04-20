@@ -10,7 +10,7 @@ web:
   environment:
     FRODO_CORS: 'true'
     FRODO_BROKER: amqp://guest:guest@broker:5672/
-    FRODO_CACHE: cache:6379
+    FRODO_CACHE: redis://cache:6379/0
   volumes:
    - .:/go/src/github.com/eventials/frodo
   hostname: frodo
