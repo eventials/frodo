@@ -34,7 +34,7 @@ func run(allowCors bool, cacheTTL int, cacheUrl, brokerUrl, brokerQueue, bindAdd
     cache, err := storage.NewStorage(cacheUrl, cacheTTL)
 
     if err != nil {
-        log.Fatalf("Can't connect to storage: %s", err)
+        log.Fatalf("Can't connect to storage: %s\n", err)
     }
 
     log.Println("Connected to storage.")
@@ -43,7 +43,7 @@ func run(allowCors bool, cacheTTL int, cacheUrl, brokerUrl, brokerQueue, bindAdd
     b, err := broker.NewBroker(brokerUrl, brokerQueue)
 
     if err != nil {
-        log.Fatalf("Can't connect to broker: %s", err)
+        log.Fatalf("Can't connect to broker: %s\n", err)
     }
 
     log.Println("Connected to broker.")
@@ -122,7 +122,7 @@ func run(allowCors bool, cacheTTL int, cacheUrl, brokerUrl, brokerQueue, bindAdd
     router.Handle("/{channel:[a-z0-9-_/]+}", es)
     router.HandleFunc("/", indexHandler)
 
-    log.Printf("Server started at %s.", bindAddress)
+    log.Printf("Server started at %s.\n", bindAddress)
     http.ListenAndServe(bindAddress, router)
 }
 

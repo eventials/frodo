@@ -38,7 +38,7 @@ func (s *storage) Close() {
 }
 
 func (s *storage) Get(key string) (string, error) {
-    log.Printf("Getting key '%s' from cache.", key)
+    log.Printf("Getting key '%s' from cache.\n", key)
     value, err := redis.String(s.connection.Do("GET", key))
     return value, err
 }
@@ -49,7 +49,7 @@ func (s *storage) HasKey(key string) bool {
 }
 
 func (s *storage) Set(key, value string) {
-    log.Printf("Setting key '%s' to cache.", key)
+    log.Printf("Setting key '%s' to cache.\n", key)
 
     if s.keyTTL == 0 {
         s.connection.Do("SET", key, value)
@@ -59,6 +59,16 @@ func (s *storage) Set(key, value string) {
 }
 
 func (s *storage) Ping() bool {
+    if err := s.connection.Err(); err != nil {
+        log.Printf("Ping error: %s\n", err)
+        return false
+    }
+
     value, err := redis.String(s.connection.Do("PING"))
+
+    if err != nil {
+        log.Printf("Ping error: %s\n", err)
+    }
+
     return err == nil && value == "PONG"
 }

@@ -316,7 +316,7 @@ func (es *eventSource) dispatch() {
 
                 log.Printf("Channel '%s' closed.\n", channel)
             } else {
-                log.Printf("Requested to close channel '%s', but it was already closed.", channel)
+                log.Printf("Requested to close channel '%s', but it was already closed.\n", channel)
             }
 
         // Event Source shutdown.
