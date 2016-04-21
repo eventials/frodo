@@ -94,5 +94,7 @@ func (b *broker) Ping() bool {
         return true
     }
 
+    log.Printf("Ping error: %s\n", err)
+
     return false
 }
