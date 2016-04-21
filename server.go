@@ -87,6 +87,14 @@ func run(allowCors bool, cacheTTL int, cacheUrl, brokerUrl, brokerQueue, bindAdd
     }()
 
     router := mux.NewRouter()
+
+    router.HandleFunc("/appstatus", func (w http.ResponseWriter, r *http.Request) {
+        cacheOK := cache.Ping()
+        brokerOK := b.Ping()
+        statusOK := cacheOK && brokerOK
+        w.Write([]byte(fmt.Sprintf("status:%t,cache:%t,broker:%t", statusOK, cacheOK, brokerOK)))
+    })
+
     router.HandleFunc("/api/stats", func (w http.ResponseWriter, r *http.Request) {
         channels := es.Channels()
         stats := Stats{

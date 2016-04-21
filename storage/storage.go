@@ -12,6 +12,7 @@ type Storage interface {
     Get(key string) (string, error)
     HasKey(key string) bool
     Set(key, value string)
+    Ping() bool
 }
 
 type storage struct {
@@ -55,4 +56,9 @@ func (s *storage) Set(key, value string) {
     } else {
         s.connection.Do("SETEX", key, s.keyTTL, value)
     }
+}
+
+func (s *storage) Ping() bool {
+    value, err := redis.String(s.connection.Do("PING"))
+    return err == nil && value == "PONG"
 }

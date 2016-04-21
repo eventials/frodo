@@ -16,6 +16,7 @@ type BrokerMessage struct {
 type Broker interface {
     Close()
     Receive() (chan BrokerMessage, error)
+    Ping() bool
 }
 
 type broker struct {
@@ -82,4 +83,16 @@ func (b *broker) Receive() (chan BrokerMessage, error) {
     }()
 
     return ms, nil
+}
+
+func (b *broker) Ping() bool {
+    // TODO: Is this the best way to test?
+    ch, err := b.connection.Channel()
+
+    if err == nil {
+        ch.Close()
+        return true
+    }
+
+    return false
 }
