@@ -21,6 +21,7 @@ type ChannelStats struct {
 }
 
 type Stats struct {
+    PoolCount int `json:"pool_count"`
     ChannelCount int `json:"channel_count"`
     ClientCount int `json:"client_count"`
     Channels map[string]ChannelStats `json:"channels"`
@@ -98,6 +99,7 @@ func run(allowCors bool, cacheTTL int, cacheUrl, brokerUrl, brokerQueue, bindAdd
     router.HandleFunc("/api/stats", func (w http.ResponseWriter, r *http.Request) {
         channels := es.Channels()
         stats := Stats{
+            cache.ConnectionCount(),
             len(channels),
             es.ConnectionCount(),
             make(map[string]ChannelStats),
