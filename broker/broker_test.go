@@ -41,8 +41,8 @@ func TestReceiveMessage(t *testing.T) {
         }
 
         err = ch.Publish(
-            "",
             "queue",
+            "",
             false,
             false,
             amqp.Publishing {
