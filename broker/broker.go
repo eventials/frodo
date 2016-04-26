@@ -39,7 +39,21 @@ func NewBroker(url, queue string) (Broker, error) {
         return nil, err
     }
 
-    q, err := ch.QueueDeclare(queue, true, false, false, false, nil)
+    err = ch.ExchangeDeclare(queue, "fanout", true, false, false, false, nil)
+
+    if err != nil {
+        ch.Close()
+        return nil, err
+    }
+
+    q, err := ch.QueueDeclare("", false, false, true, false, nil)
+
+    if err != nil {
+        ch.Close()
+        return nil, err
+    }
+
+    err = ch.QueueBind(q.Name, "", queue, false, nil)
 
     if err != nil {
         ch.Close()
