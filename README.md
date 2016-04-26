@@ -60,6 +60,6 @@ there's a default value for each option.
 
 ## Building Docker Image
 
-Just run `docker build -t username/imagename -f ./Dockerfile.build`.
+Just run `docker build -t eventials/frodo -f Dockerfile.build --no-cache .`.
 
 To publish run `docker push username/imagename`.
