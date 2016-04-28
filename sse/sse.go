@@ -128,34 +128,39 @@ func (es *eventSource) ServeHTTP(response http.ResponseWriter, request *http.Req
         return
     }
 
-    c := &client{
-        request.URL.Path, // Channel name is the full path.
-        getIP(request),
-        make(chan string),
-    }
-
-    es.addClient <- c
-
-    notify := response.(http.CloseNotifier).CloseNotify()
-
-    go func() {
-        <-notify
-        es.removeClient <- c
-    }()
-
     h := response.Header()
-    h.Set("Content-Type", "text/event-stream")
-    h.Set("Cache-Control", "no-cache")
-    h.Set("Connection", "keep-alive")
 
     if es.settings.AllowCors {
         h.Set("Access-Control-Allow-Origin", "*")
+        h.Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+        h.Set("Access-Control-Allow-Headers", "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type")
     }
 
-    for {
-        msg := <-c.send
-        fmt.Fprintf(response, "data: %s\n\n", msg)
-        flusher.Flush()
+    if request.Method == "GET" {
+        h.Set("Content-Type", "text/event-stream")
+        h.Set("Cache-Control", "no-cache")
+        h.Set("Connection", "keep-alive")
+
+        c := &client{
+            request.URL.Path, // Channel name is the full path.
+            getIP(request),
+            make(chan string),
+        }
+
+        es.addClient <- c
+
+        notify := response.(http.CloseNotifier).CloseNotify()
+
+        go func() {
+            <-notify
+            es.removeClient <- c
+        }()
+
+        for {
+            msg := <-c.send
+            fmt.Fprintf(response, "data: %s\n\n", msg)
+            flusher.Flush()
+        }
     }
 }
 
