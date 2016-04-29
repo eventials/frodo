@@ -54,6 +54,7 @@ type client struct {
     channel string
     ip string
     send chan string
+    closed bool
 }
 
 type eventMessage struct {
@@ -145,6 +146,7 @@ func (es *eventSource) ServeHTTP(response http.ResponseWriter, request *http.Req
             request.URL.Path, // Channel name is the full path.
             getIP(request),
             make(chan string),
+            false,
         }
 
         es.addClient <- c
@@ -157,6 +159,10 @@ func (es *eventSource) ServeHTTP(response http.ResponseWriter, request *http.Req
         }()
 
         for {
+            if c.closed {
+                break
+            }
+
             msg := <-c.send
             fmt.Fprintf(response, "data: %s\n\n", msg)
             flusher.Flush()
@@ -284,6 +290,7 @@ func (es *eventSource) dispatch() {
                 }
             }
 
+            c.closed = true
             close(c.send)
 
             if es.settings.OnClientDisconnect != nil {
