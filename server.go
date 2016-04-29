@@ -32,7 +32,10 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func run(allowCors bool, cacheTTL int, cacheUrl, brokerUrl, brokerQueue, bindAddress string) {
-    cache, err := storage.NewStorage(cacheUrl, cacheTTL)
+    cache, err := storage.NewStorage(storage.Settings{
+        Url: cacheUrl,
+        KeyTTL: cacheTTL,
+    })
 
     if err != nil {
         log.Fatalf("Can't connect to storage: %s\n", err)
@@ -41,7 +44,37 @@ func run(allowCors bool, cacheTTL int, cacheUrl, brokerUrl, brokerQueue, bindAdd
     log.Println("Connected to storage.")
     defer cache.Close()
 
-    b, err := broker.NewBroker(brokerUrl, brokerQueue)
+    es := sse.NewEventSource(sse.Settings{
+        AllowCors: allowCors,
+        OnClientConnect: func (es *sse.EventSource, c *sse.Client) {
+            // When a client connect for the first time, we send the last message.
+            if msg, ok := es.GetLastMessage(c.Channel()); ok {
+                log.Println("Sending last message to new client.")
+                c.SendMessage(msg)
+            }
+        },
+        OnChannelCreate: func (es *sse.EventSource, channelName string) {
+            // Load the last message from cache to memory.
+            if msg, err := cache.Get(channelName); err == nil {
+                log.Println("Loading last message from cache.")
+                es.SetLastMessage(channelName, msg)
+            }
+        },
+    })
+
+    log.Println("Event Source started.")
+    defer es.Shutdown()
+
+    b, err := broker.NewBroker(broker.Settings{
+        Url: brokerUrl,
+        ExchangeName: brokerQueue,
+        OnMessage: func (eventMessage broker.BrokerMessage) {
+            c := eventMessage.Channel
+            msg := string(eventMessage.Data[:])
+            cache.Set(c, msg)
+            es.SendMessage(c, msg)
+        },
+    })
 
     if err != nil {
         log.Fatalf("Can't connect to broker: %s\n", err)
@@ -50,42 +83,11 @@ func run(allowCors bool, cacheTTL int, cacheUrl, brokerUrl, brokerQueue, bindAdd
     log.Println("Connected to broker.")
     defer b.Close()
 
-    es := sse.NewEventSource(sse.Settings{
-        AllowCors: allowCors,
-        OnClientConnect: func (es sse.EventSource, c sse.Client) {
-            // When a client connect for the first time, we send the last message.
-            if msg, ok := es.GetLastMessage(c.Channel()); ok {
-                c.SendMessage(msg)
-            }
-        },
-        OnChannelCreate: func (es sse.EventSource, channelName string) {
-            // Load the last message from cache to memory.
-            if msg, err := cache.Get(channelName); err == nil {
-                es.SetLastMessage(channelName, msg)
-            }
-        },
-    })
-
-    defer es.Shutdown()
-
-    msgs, err := b.Receive()
+    err = b.StartListen()
 
     if err != nil {
         log.Fatalf("Can't receive messages: %s\n", err)
     }
-
-    // Listen for incoming messages from Broker.
-    // If got any, store in the cache and send to ES listeners.
-    go func () {
-        for {
-            eventMessage := <- msgs
-
-            c := eventMessage.Channel
-            msg := string(eventMessage.Data[:])
-            cache.Set(c, msg)
-            es.SendMessage(c, msg)
-        }
-    }()
 
     router := mux.NewRouter()
 

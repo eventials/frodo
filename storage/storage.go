@@ -8,27 +8,23 @@ import (
     "github.com/garyburd/redigo/redis"
 )
 
-type Storage interface {
-    Close()
-    Get(key string) (string, error)
-    HasKey(key string) bool
-    Set(key, value string)
-    Ping() bool
-    ConnectionCount() int
+type Settings struct {
+    Url string
+    KeyTTL int
 }
 
-type storage struct {
+type Storage struct {
+    settings Settings
     pool redis.Pool
-    keyTTL int
 }
 
-func NewStorage(address string, keyTTL int) (Storage, error) {
+func NewStorage(settings Settings) (*Storage, error) {
     pool := redis.Pool{
         MaxIdle: 3,
         MaxActive: 100,
         IdleTimeout: 120 * time.Second,
         Dial: func () (redis.Conn, error) {
-            c, err := redis.DialURL(address)
+            c, err := redis.DialURL(settings.Url)
 
             if err != nil {
                 return nil, err
@@ -42,17 +38,17 @@ func NewStorage(address string, keyTTL int) (Storage, error) {
         },
     }
 
-    return &storage{
+    return &Storage{
+        settings,
         pool,
-        keyTTL,
     }, nil
 }
 
-func (s *storage) Close() {
+func (s *Storage) Close() {
     s.pool.Close()
 }
 
-func (s *storage) Get(key string) (string, error) {
+func (s *Storage) Get(key string) (string, error) {
     log.Printf("Getting key '%s' from cache.\n", key)
 
     conn := s.pool.Get()
@@ -63,7 +59,7 @@ func (s *storage) Get(key string) (string, error) {
     return value, err
 }
 
-func (s *storage) HasKey(key string) bool {
+func (s *Storage) HasKey(key string) bool {
     conn := s.pool.Get()
     defer conn.Close()
 
@@ -72,20 +68,20 @@ func (s *storage) HasKey(key string) bool {
     return exists
 }
 
-func (s *storage) Set(key, value string) {
+func (s *Storage) Set(key, value string) {
     log.Printf("Setting key '%s' to cache.\n", key)
 
     conn := s.pool.Get()
     defer conn.Close()
 
-    if s.keyTTL == 0 {
+    if s.settings.KeyTTL == 0 {
         conn.Do("SET", key, value)
     } else {
-        conn.Do("SETEX", key, s.keyTTL, value)
+        conn.Do("SETEX", key, s.settings.KeyTTL, value)
     }
 }
 
-func (s *storage) Ping() bool {
+func (s *Storage) Ping() bool {
     conn := s.pool.Get()
     defer conn.Close()
 
@@ -103,6 +99,6 @@ func (s *storage) Ping() bool {
     return err == nil && value == "PONG"
 }
 
-func (s *storage) ConnectionCount() int {
+func (s *Storage) ConnectionCount() int {
     return s.pool.ActiveCount()
 }

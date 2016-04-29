@@ -13,20 +13,21 @@ type BrokerMessage struct {
     Data json.RawMessage `json:"data"`
 }
 
-type Broker interface {
-    Close()
-    Receive() (chan BrokerMessage, error)
-    Ping() bool
+type Settings struct {
+    Url string
+    ExchangeName string
+    OnMessage func (BrokerMessage)
 }
 
-type broker struct {
+type Broker struct {
+    settings Settings
     connection *amqp.Connection
     channel *amqp.Channel
     queue *amqp.Queue
 }
 
-func NewBroker(url, queue string) (Broker, error) {
-    conn, err := amqp.Dial(url)
+func NewBroker(settings Settings) (*Broker, error) {
+    conn, err := amqp.Dial(settings.Url)
 
     if err != nil {
         return nil, err
@@ -39,7 +40,7 @@ func NewBroker(url, queue string) (Broker, error) {
         return nil, err
     }
 
-    err = ch.ExchangeDeclare(queue, "fanout", true, false, false, false, nil)
+    err = ch.ExchangeDeclare(settings.ExchangeName, "fanout", true, false, false, false, nil)
 
     if err != nil {
         ch.Close()
@@ -53,30 +54,28 @@ func NewBroker(url, queue string) (Broker, error) {
         return nil, err
     }
 
-    err = ch.QueueBind(q.Name, "", queue, false, nil)
+    err = ch.QueueBind(q.Name, "", settings.ExchangeName, false, nil)
 
     if err != nil {
         ch.Close()
         return nil, err
     }
 
-    b := &broker{conn, ch, &q}
+    b := &Broker{settings, conn, ch, &q}
     return b, nil
 }
 
-func (b *broker) Close() {
+func (b *Broker) Close() {
     b.connection.Close()
     b.channel.Close()
 }
 
-func (b *broker) Receive() (chan BrokerMessage, error) {
+func (b *Broker) StartListen() error {
     msgs, err := b.channel.Consume(b.queue.Name, "", true, false, false, false, nil)
 
     if err != nil {
-        return nil, err
+        return err
     }
-
-    ms := make(chan BrokerMessage)
 
     go func() {
         for m := range msgs {
@@ -86,7 +85,9 @@ func (b *broker) Receive() (chan BrokerMessage, error) {
                 var brokerMessage BrokerMessage
 
                 if err = json.Unmarshal(m.Body, &brokerMessage); err == nil {
-                    ms <- brokerMessage
+                    if b.settings.OnMessage != nil {
+                        b.settings.OnMessage(brokerMessage)
+                    }
                 } else {
                     log.Printf("Can't decode JSON message: %s", err)
                 }
@@ -96,10 +97,10 @@ func (b *broker) Receive() (chan BrokerMessage, error) {
         }
     }()
 
-    return ms, nil
+    return nil
 }
 
-func (b *broker) Ping() bool {
+func (b *Broker) Ping() bool {
     // TODO: Is this the best way to test?
     ch, err := b.connection.Channel()
 
@@ -110,5 +111,27 @@ func (b *broker) Ping() bool {
 
     log.Printf("Ping error: %s\n", err)
 
+    go func() {
+        // TODO: Should we panic if got an error
+        // or should we try until some timeout?
+        b.reconnect()
+    }()
+
     return false
+}
+
+func (b *Broker) reconnect() error {
+    log.Println("Reconnecting broker due connection loss.")
+
+    newb, err := NewBroker(b.settings)
+
+    if err != nil {
+        return err
+    }
+
+    b.connection = newb.connection
+    b.channel = newb.channel
+    b.queue = newb.queue
+
+    return b.StartListen()
 }
