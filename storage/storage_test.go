@@ -7,7 +7,10 @@ import (
 )
 
 func TestWithTTL(t *testing.T) {
-    s, err := NewStorage(os.Getenv("REDIS_URL"), 3)
+    s, err := NewStorage(Settings{
+        Url: os.Getenv("REDIS_URL"),
+        KeyTTL: 3,
+    })
 
     if err != nil {
         t.Fatal(err)
@@ -27,7 +30,10 @@ func TestWithTTL(t *testing.T) {
 }
 
 func TestWithoutTTL(t *testing.T) {
-    s, err := NewStorage(os.Getenv("REDIS_URL"), 0)
+    s, err := NewStorage(Settings{
+        Url: os.Getenv("REDIS_URL"),
+        KeyTTL: 0,
+    })
 
     if err != nil {
         t.Fatal(err)

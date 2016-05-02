@@ -9,7 +9,25 @@ import (
 )
 
 func TestReceiveMessage(t *testing.T) {
-    b, err := NewBroker(os.Getenv("AMQP_URL"), "queue")
+    received := make(chan bool)
+
+    b, err := NewBroker(Settings{
+        Url: os.Getenv("AMQP_URL"),
+        ExchangeName: "queue",
+        OnMessage: func (msg BrokerMessage) {
+            if msg.Channel != "/test/channel" {
+                t.Fatal("Wrong channel")
+            }
+
+            text := string(msg.Data[:])
+
+            if text != "\"test message\"" {
+                t.Fatal("Wrong message")
+            }
+
+            received <- true
+        },
+    })
 
     if err != nil {
         t.Fatal(err)
@@ -17,11 +35,22 @@ func TestReceiveMessage(t *testing.T) {
 
     defer b.Close()
 
-    msgs, err := b.Receive()
+    err = b.StartListen()
 
     if err != nil {
         t.Fatal(err)
     }
+
+    go func() {
+        for {
+            select {
+                case <- received:
+                    return
+                case <-time.After(5 * time.Second):
+                    t.Fatal("No message receive. Timeout.")
+            }
+        }
+    }()
 
     go func() {
         time.Sleep(1 * time.Second)
@@ -55,23 +84,4 @@ func TestReceiveMessage(t *testing.T) {
             t.Fatal(err)
         }
     }()
-
-    for {
-        select {
-            case eventMessage := <- msgs:
-                if eventMessage.Channel != "/test/channel" {
-                    t.Fatal("Wrong channel")
-                }
-
-                msg := string(eventMessage.Data[:])
-
-                if msg != "\"test message\"" {
-                    t.Fatal("Wrong message")
-                }
-
-                return
-            case <-time.After(5 * time.Second):
-                t.Fatal("No message receive. Timeout.")
-        }
-    }
 }
