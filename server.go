@@ -95,6 +95,11 @@ func run(allowCors bool, cacheTTL int, cacheUrl, brokerUrl, brokerQueue, bindAdd
         cacheOK := cache.Ping()
         brokerOK := b.Ping()
         statusOK := cacheOK && brokerOK
+
+        if !statusOK {
+            w.WriteHeader(http.StatusInternalServerError)
+        }
+
         w.Write([]byte(fmt.Sprintf("status:%t,cache:%t,broker:%t", statusOK, cacheOK, brokerOK)))
     })
 
