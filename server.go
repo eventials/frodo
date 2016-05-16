@@ -31,7 +31,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
     fmt.Fprint(w, "Frodo")
 }
 
-func run(allowCors bool, cacheTTL int, cacheUrl, brokerUrl, brokerQueue, bindAddress string) {
+func run(cacheTTL int, cacheUrl, brokerUrl, brokerQueue, bindAddress string) {
     cache, err := storage.NewStorage(storage.Settings{
         Url: cacheUrl,
         KeyTTL: cacheTTL,
@@ -45,7 +45,6 @@ func run(allowCors bool, cacheTTL int, cacheUrl, brokerUrl, brokerQueue, bindAdd
     defer cache.Close()
 
     es := sse.NewEventSource(sse.Settings{
-        AllowCors: allowCors,
         OnClientConnect: func (es *sse.EventSource, c *sse.Client) {
             // When a client connect for the first time, we send the last message.
             if msg, ok := es.GetLastMessage(c.Channel()); ok {
@@ -151,7 +150,6 @@ func main() {
         ttl = 60
     }
 
-    allowCors := flag.Bool("cors", os.Getenv("FRODO_CORS") == "true", "Allow CORS.")
     cacheUrl := flag.String("cache", defaultValue(os.Getenv("FRODO_CACHE"), "redis://127.0.0.1:6379/0"), "Cache URL.")
     cacheTTL := flag.Int("ttl", int(ttl), "Cache TTL in seconds.")
     brokerUrl := flag.String("broker", defaultValue(os.Getenv("FRODO_BROKER"), "amqp://"), "Broker URL.")
@@ -160,5 +158,5 @@ func main() {
 
     flag.Parse()
 
-    run(*allowCors, *cacheTTL, *cacheUrl, *brokerUrl, *brokerQueue, *bindAddress)
+    run(*cacheTTL, *cacheUrl, *brokerUrl, *brokerQueue, *bindAddress)
 }

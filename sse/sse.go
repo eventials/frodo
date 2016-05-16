@@ -23,7 +23,6 @@ import (
 )
 
 type Settings struct {
-    AllowCors bool
     OnClientConnect func (*EventSource, *Client)
     OnClientDisconnect func (*EventSource, *Client)
     OnChannelCreate func (*EventSource, string)
@@ -58,7 +57,6 @@ func getIP(request *http.Request) string {
     if len(ip) > 0 {
         return strings.Split(ip, ",")[0]
     }
-
 
     if ip, _, err := net.SplitHostPort(request.RemoteAddr); err == nil {
         return ip
@@ -109,12 +107,6 @@ func (es *EventSource) ServeHTTP(response http.ResponseWriter, request *http.Req
     }
 
     h := response.Header()
-
-    if es.settings.AllowCors {
-        h.Set("Access-Control-Allow-Origin", "*")
-        h.Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-        h.Set("Access-Control-Allow-Headers", "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type")
-    }
 
     if request.Method == "GET" {
         h.Set("Content-Type", "text/event-stream")
