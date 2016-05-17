@@ -21,20 +21,15 @@ The `data` key can be any valid JSON object.
 This value is by-pass, so, Frodo won't take a look into it, it will just publish in the channel.
 The client must know how to use this data.
 
-Frodo uses a cache to store the last message receive in the channel.
-This is used to broadcast the last message to new clients.
-
 ## Requirements
 
 - RabbitMQ or any other AMQP 0.9.1 broker
-- Redis
 
 ## Go dependencies
 
 ```sh
 go get github.com/gorilla/mux
 go get github.com/streadway/amqp
-go get github.com/garyburd/redigo/redis
 ```
 
 ## Setup
@@ -50,13 +45,10 @@ Command line arguments are priority if set, if not use environment variables, an
 there's a default value for each option.
 
 | Option       | CL Argument | Env Var  | Default                    |
-|:-------------|:--------|:-------------|:---------------------------|
-| Allow CORS   | -cors   | FRODO_CORS   | `false`                    |
-| Bind Address | -bind   | FRODO_BIND   | `:3000`                    |
-| Broker URL   | -broker | FRODO_BROKER | `amqp://`                  |
-| Broker Queue | -queue  | FRODO_QUEUE  | `frodo`                    |
-| Cache URL    | -cache  | FRODO_CACHE  | `redis://127.0.0.1:6379/0` |
-| Cache TTL    | -ttl    | FRODO_TTL    | `60` seconds                |
+|:-------------|:-------- |:-------------|:---------------------------|
+| App Name     | -appname | FRODO_NAME   | `frodo`                    |
+| Bind Address | -bind    | FRODO_BIND   | `:3000`                    |
+| Broker URL   | -broker  | FRODO_BROKER | `amqp://`                  |
 
 ## Building Docker Image
 

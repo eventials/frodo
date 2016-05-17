@@ -4,21 +4,15 @@ web:
   command: dockerize -wait tcp://broker:5672 -timeout 60s go run server.go
   links:
    - broker
-   - cache
   ports:
    - "3000:3000"
   environment:
-    FRODO_CORS: 'true'
     FRODO_BROKER: amqp://guest:guest@broker:5672/
-    FRODO_CACHE: redis://cache:6379/0
     # for testing purpose only.
     AMQP_URL: amqp://guest:guest@broker:5672/
-    REDIS_URL: redis://cache:6379/0
   volumes:
    - .:/go/src/github.com/eventials/frodo
   hostname: frodo
-cache:
-  image: redis:3.0
 broker:
   image: rabbitmq:3.6-management
   ports:

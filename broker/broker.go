@@ -16,7 +16,6 @@ type BrokerMessage struct {
 type Settings struct {
     Url string
     ExchangeName string
-    OnMessage func (BrokerMessage)
 }
 
 type Broker struct {
@@ -24,6 +23,9 @@ type Broker struct {
     connection *amqp.Connection
     channel *amqp.Channel
     queue *amqp.Queue
+
+    Message chan BrokerMessage
+    ConnectionLost chan bool
 }
 
 func NewBroker(settings Settings) (*Broker, error) {
@@ -61,13 +63,23 @@ func NewBroker(settings Settings) (*Broker, error) {
         return nil, err
     }
 
-    b := &Broker{settings, conn, ch, &q}
+    b := &Broker{
+        settings,
+        conn,
+        ch,
+        &q,
+        make(chan BrokerMessage),
+        make(chan bool),
+    }
+
     return b, nil
 }
 
 func (b *Broker) Close() {
     b.connection.Close()
     b.channel.Close()
+    close(b.Message)
+    close(b.ConnectionLost)
 }
 
 func (b *Broker) StartListen() error {
@@ -85,9 +97,7 @@ func (b *Broker) StartListen() error {
                 var brokerMessage BrokerMessage
 
                 if err = json.Unmarshal(m.Body, &brokerMessage); err == nil {
-                    if b.settings.OnMessage != nil {
-                        b.settings.OnMessage(brokerMessage)
-                    }
+                    b.Message <- brokerMessage
                 } else {
                     log.Printf("Can't decode JSON message: %s", err)
                 }
@@ -108,6 +118,8 @@ func (b *Broker) Ping() bool {
         ch.Close()
         return true
     }
+
+    b.ConnectionLost <- true
 
     log.Printf("Ping error: %s\n", err)
 

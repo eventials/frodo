@@ -22,14 +22,6 @@ import (
     "strings"
 )
 
-type Settings struct {
-    AllowCors bool
-    OnClientConnect func (*EventSource, *Client)
-    OnClientDisconnect func (*EventSource, *Client)
-    OnChannelCreate func (*EventSource, string)
-    OnChannelClose func (*EventSource, string)
-}
-
 type Client struct {
     channel string
     ip string
@@ -43,13 +35,16 @@ type eventMessage struct {
 
 type EventSource struct {
     channels map[string]map[*Client]bool
-    lastMessage map[string]string
     addClient chan *Client
     removeClient chan *Client
     sendMessage chan *eventMessage
     shutdown chan bool
     closeChannel chan string
-    settings Settings
+
+    ClientConnect chan *Client
+    ClientDisconnect chan *Client
+    ChannelCreate chan string
+    ChannelClose chan string
 }
 
 func getIP(request *http.Request) string {
@@ -58,7 +53,6 @@ func getIP(request *http.Request) string {
     if len(ip) > 0 {
         return strings.Split(ip, ",")[0]
     }
-
 
     if ip, _, err := net.SplitHostPort(request.RemoteAddr); err == nil {
         return ip
@@ -83,16 +77,19 @@ func (c *Client) IP() string {
 }
 
 // NewEventSource creates a new Event Source.
-func NewEventSource(settings Settings) *EventSource {
+func NewEventSource() *EventSource {
     es := &EventSource{
         make(map[string]map[*Client]bool),
-        make(map[string]string),
         make(chan *Client),
         make(chan *Client),
         make(chan *eventMessage),
         make(chan bool),
         make(chan string),
-        settings,
+
+        make(chan *Client),
+        make(chan *Client),
+        make(chan string),
+        make(chan string),
     }
 
     go es.dispatch()
@@ -109,12 +106,6 @@ func (es *EventSource) ServeHTTP(response http.ResponseWriter, request *http.Req
     }
 
     h := response.Header()
-
-    if es.settings.AllowCors {
-        h.Set("Access-Control-Allow-Origin", "*")
-        h.Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-        h.Set("Access-Control-Allow-Headers", "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type")
-    }
 
     if request.Method == "GET" {
         h.Set("Content-Type", "text/event-stream")
@@ -164,15 +155,6 @@ func (es *EventSource) Channels() []string {
     }
 
     return channels
-}
-
-func (es *EventSource) GetLastMessage(channel string) (string, bool) {
-    msg, ok := es.lastMessage[channel]
-    return msg, ok
-}
-
-func (es *EventSource) SetLastMessage(channel, message string) {
-    es.lastMessage[channel] = message
 }
 
 // Channels returns true if a channel exists, false otherwise.
@@ -231,18 +213,12 @@ func (es *EventSource) dispatch() {
                 ch = make(map[*Client]bool)
                 es.channels[c.channel] = ch
                 log.Printf("New channel '%s' created.\n", c.channel)
-
-                if es.settings.OnChannelCreate != nil {
-                    es.settings.OnChannelCreate(es, c.channel)
-                }
+                es.ChannelCreate <- c.channel
             }
 
             ch[c] = true
             log.Printf("Client '%s' connected to channel '%s'.\n", c.ip, c.channel)
-
-            if es.settings.OnClientConnect != nil {
-                es.settings.OnClientConnect(es, c)
-            }
+            es.ClientConnect <- c
 
         // Client disconnected.
         case c := <- es.removeClient:
@@ -256,24 +232,16 @@ func (es *EventSource) dispatch() {
                 if len(ch) == 0 {
                     delete(es.channels, c.channel)
                     log.Printf("Channel '%s' has no clients. Channel closed.\n", c.channel)
-
-                    if es.settings.OnChannelClose != nil {
-                        es.settings.OnChannelClose(es, c.channel)
-                    }
+                    es.ChannelClose <- c.channel
                 }
             }
 
             close(c.send)
-
-            if es.settings.OnClientDisconnect != nil {
-                es.settings.OnClientDisconnect(es, c)
-            }
+            es.ClientDisconnect <- c
 
         // Broadcast message to all clients in channel.
         case msg := <- es.sendMessage:
             if ch, ok := es.channels[msg.channel]; ok {
-                es.SetLastMessage(msg.channel, msg.message)
-
                 for c, open := range ch {
                     if open {
                         c.send <- msg.message
@@ -289,7 +257,6 @@ func (es *EventSource) dispatch() {
         case channel := <- es.closeChannel:
             if ch, exists := es.channels[channel]; exists {
                 delete(es.channels, channel)
-                delete(es.lastMessage, channel)
 
                 // Kick all clients of this channel.
                 for c, _ := range ch {
@@ -310,6 +277,10 @@ func (es *EventSource) dispatch() {
             close(es.removeClient)
             close(es.sendMessage)
             close(es.shutdown)
+            close(es.ClientConnect)
+            close(es.ClientDisconnect)
+            close(es.ChannelCreate)
+            close(es.ChannelClose)
             log.Println("Event Source server stoped.")
             return
         }
