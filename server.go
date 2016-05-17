@@ -117,7 +117,7 @@ func defaultValue(a, b string) string {
 func main() {
     appName := flag.String("appname", defaultValue(os.Getenv("FRODO_NAME"), "frodo"), "Application name.")
     bindAddress := flag.String("bind", defaultValue(os.Getenv("FRODO_BIND"), ":3000"), "Bind Address.")
-    brokerUrl := flag.String("broker", defaultValue(os.Getenv("FRODO_BROKER_URL"), "amqp://"), "Broker URL.")
+    brokerUrl := flag.String("broker", defaultValue(os.Getenv("FRODO_BROKER"), "amqp://"), "Broker URL.")
 
     flag.Parse()
 
