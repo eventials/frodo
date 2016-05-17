@@ -14,7 +14,10 @@ func TestReceiveMessage(t *testing.T) {
     b, err := NewBroker(Settings{
         Url: os.Getenv("AMQP_URL"),
         ExchangeName: "queue",
-        OnMessage: func (msg BrokerMessage) {
+    })
+
+    go func() {
+        for msg := range b.Message {
             if msg.Channel != "/test/channel" {
                 t.Fatal("Wrong channel")
             }
@@ -26,8 +29,8 @@ func TestReceiveMessage(t *testing.T) {
             }
 
             received <- true
-        },
-    })
+        }
+    }()
 
     if err != nil {
         t.Fatal(err)
