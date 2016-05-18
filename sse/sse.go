@@ -34,17 +34,13 @@ type eventMessage struct {
 }
 
 type EventSource struct {
+    allowCors bool
     channels map[string]map[*Client]bool
     addClient chan *Client
     removeClient chan *Client
     sendMessage chan *eventMessage
     shutdown chan bool
     closeChannel chan string
-
-    ClientConnect chan *Client
-    ClientDisconnect chan *Client
-    ChannelCreate chan string
-    ChannelClose chan string
 }
 
 func getIP(request *http.Request) string {
@@ -77,18 +73,14 @@ func (c *Client) IP() string {
 }
 
 // NewEventSource creates a new Event Source.
-func NewEventSource() *EventSource {
+func NewEventSource(allowCors bool) *EventSource {
     es := &EventSource{
+        allowCors,
         make(map[string]map[*Client]bool),
         make(chan *Client),
         make(chan *Client),
         make(chan *eventMessage),
         make(chan bool),
-        make(chan string),
-
-        make(chan *Client),
-        make(chan *Client),
-        make(chan string),
         make(chan string),
     }
 
@@ -106,6 +98,12 @@ func (es *EventSource) ServeHTTP(response http.ResponseWriter, request *http.Req
     }
 
     h := response.Header()
+
+    if es.allowCors {
+        h.Set("Access-Control-Allow-Origin", "*")
+        h.Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+        h.Set("Access-Control-Allow-Headers", "Keep-Alive,X-Requested-With,Cache-Control,Content-Type,Last-Event-ID")
+    }
 
     if request.Method == "GET" {
         h.Set("Content-Type", "text/event-stream")
@@ -213,12 +211,10 @@ func (es *EventSource) dispatch() {
                 ch = make(map[*Client]bool)
                 es.channels[c.channel] = ch
                 log.Printf("New channel '%s' created.\n", c.channel)
-                es.ChannelCreate <- c.channel
             }
 
             ch[c] = true
             log.Printf("Client '%s' connected to channel '%s'.\n", c.ip, c.channel)
-            es.ClientConnect <- c
 
         // Client disconnected.
         case c := <- es.removeClient:
@@ -232,12 +228,10 @@ func (es *EventSource) dispatch() {
                 if len(ch) == 0 {
                     delete(es.channels, c.channel)
                     log.Printf("Channel '%s' has no clients. Channel closed.\n", c.channel)
-                    es.ChannelClose <- c.channel
                 }
             }
 
             close(c.send)
-            es.ClientDisconnect <- c
 
         // Broadcast message to all clients in channel.
         case msg := <- es.sendMessage:
@@ -277,10 +271,6 @@ func (es *EventSource) dispatch() {
             close(es.removeClient)
             close(es.sendMessage)
             close(es.shutdown)
-            close(es.ClientConnect)
-            close(es.ClientDisconnect)
-            close(es.ChannelCreate)
-            close(es.ChannelClose)
             log.Println("Event Source server stoped.")
             return
         }

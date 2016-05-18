@@ -46,6 +46,7 @@ there's a default value for each option.
 
 | Option       | CL Argument | Env Var  | Default                    |
 |:-------------|:-------- |:-------------|:---------------------------|
+| Allow CORS   | -cors   | FRODO_CORS   | `false`                    |
 | App Name     | -appname | FRODO_NAME   | `frodo`                    |
 | Bind Address | -bind    | FRODO_BIND   | `:3000`                    |
 | Broker URL   | -broker  | FRODO_BROKER | `amqp://`                  |

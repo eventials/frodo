@@ -28,8 +28,8 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
     fmt.Fprint(w, "Frodo")
 }
 
-func run(appName, bindAddress, brokerUrl string) {
-    es := sse.NewEventSource()
+func run(appName, bindAddress, brokerUrl string, allowCors bool) {
+    es := sse.NewEventSource(allowCors)
     log.Println("Event Source started.")
     defer es.Shutdown()
 
@@ -115,11 +115,12 @@ func defaultValue(a, b string) string {
 }
 
 func main() {
+    allowCors := flag.Bool("cors", os.Getenv("FRODO_CORS") == "true", "Allow CORS.")
     appName := flag.String("appname", defaultValue(os.Getenv("FRODO_NAME"), "frodo"), "Application name.")
     bindAddress := flag.String("bind", defaultValue(os.Getenv("FRODO_BIND"), ":3000"), "Bind Address.")
     brokerUrl := flag.String("broker", defaultValue(os.Getenv("FRODO_BROKER"), "amqp://"), "Broker URL.")
 
     flag.Parse()
 
-    run(*appName, *bindAddress, *brokerUrl)
+    run(*appName, *bindAddress, *brokerUrl, *allowCors)
 }

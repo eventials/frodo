@@ -7,6 +7,7 @@ web:
   ports:
    - "3000:3000"
   environment:
+    FRODO_CORS: 'true'
     FRODO_BROKER: amqp://guest:guest@broker:5672/
     # for testing purpose only.
     AMQP_URL: amqp://guest:guest@broker:5672/
