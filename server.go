@@ -4,13 +4,13 @@ import (
     "encoding/json"
     "flag"
     "fmt"
-    "log"
     "net/http"
     "os"
 
     "github.com/gorilla/mux"
 
     "github.com/eventials/frodo/broker"
+    "github.com/eventials/frodo/log"
     "github.com/eventials/frodo/sse"
 )
 
@@ -30,21 +30,21 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 
 func run(appName, bindAddress, brokerUrl string, allowCors bool) {
     es := sse.NewEventSource(allowCors)
-    log.Println("Event Source started.")
+    log.Info("Event Source started.")
     defer es.Shutdown()
 
     b, err := broker.NewBroker(broker.Settings{brokerUrl, appName})
 
     if err != nil {
-        log.Fatalf("Can't connect to broker: %s\n", err)
+        log.Fatal("Can't connect to broker: %s", err)
     }
 
-    log.Println("Connected to broker.")
+    log.Info("Connected to broker.")
     defer b.Close()
 
     go func() {
         for _ = range b.ConnectionLost {
-            log.Println("Broker connection lost. Closing channels...")
+            log.Info("Broker connection lost. Closing channels...")
             es.CloseChannels()
         }
     }()
@@ -60,7 +60,7 @@ func run(appName, bindAddress, brokerUrl string, allowCors bool) {
     err = b.StartListen()
 
     if err != nil {
-        log.Fatalf("Can't receive messages from broker: %s\n", err)
+        log.Fatal("Can't receive messages from broker: %s", err)
     }
 
     router := mux.NewRouter()
@@ -102,7 +102,7 @@ func run(appName, bindAddress, brokerUrl string, allowCors bool) {
     router.Handle("/{channel:[a-z0-9-_/]+}", es)
     router.HandleFunc("/", indexHandler)
 
-    log.Printf("Server started at %s.\n", bindAddress)
+    log.Info("Server started at %s.", bindAddress)
     http.ListenAndServe(bindAddress, router)
 }
 
@@ -119,8 +119,15 @@ func main() {
     appName := flag.String("appname", defaultValue(os.Getenv("FRODO_NAME"), "frodo"), "Application name.")
     bindAddress := flag.String("bind", defaultValue(os.Getenv("FRODO_BIND"), ":3000"), "Bind Address.")
     brokerUrl := flag.String("broker", defaultValue(os.Getenv("FRODO_BROKER"), "amqp://"), "Broker URL.")
+    sentryDsn := flag.String("log-sentry", defaultValue(os.Getenv("FRODO_LOG_SENTRY"), ""), "Sentry DSN URl.")
 
     flag.Parse()
+
+    log.AddHandler("console")
+
+    if len(*sentryDsn) > 0 {
+        log.AddHandler("sentry", *sentryDsn)
+    }
 
     run(*appName, *bindAddress, *brokerUrl, *allowCors)
 }

@@ -3,6 +3,7 @@ FROM golang:1.6
 RUN go get github.com/eventials/frodo
 RUN go get github.com/gorilla/mux
 RUN go get github.com/streadway/amqp
+RUN go get github.com/getsentry/raven-go
 
 EXPOSE 3000
 

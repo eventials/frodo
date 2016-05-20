@@ -3,8 +3,8 @@ package broker
 
 import (
     "encoding/json"
-    "log"
 
+    "github.com/eventials/frodo/log"
     "github.com/streadway/amqp"
 )
 
@@ -91,19 +91,19 @@ func (b *Broker) StartListen() error {
 
     go func() {
         for m := range msgs {
-            log.Println("Got new message from broker.")
+            log.Info("Got new message from broker.")
 
             if m.ContentType == "application/json" {
                 var brokerMessage BrokerMessage
 
                 if err = json.Unmarshal(m.Body, &brokerMessage); err == nil {
-                    log.Println("Valid message. Broadcasting...")
+                    log.Info("Valid message. Broadcasting...")
                     b.Message <- brokerMessage
                 } else {
-                    log.Printf("Can't decode JSON message: %s", err)
+                    log.Error("Can't decode JSON message: %s", err)
                 }
             } else {
-                log.Printf("Message is not JSON: %s", m.ContentType)
+                log.Error("Message is not JSON: %s", m.ContentType)
             }
         }
     }()
@@ -122,7 +122,7 @@ func (b *Broker) Ping() bool {
 
     b.ConnectionLost <- true
 
-    log.Printf("Ping error: %s\n", err)
+    log.Error("Ping error: %s", err)
 
     go func() {
         // TODO: Should we panic if got an error
@@ -134,7 +134,7 @@ func (b *Broker) Ping() bool {
 }
 
 func (b *Broker) reconnect() error {
-    log.Println("Reconnecting broker due connection loss.")
+    log.Info("Reconnecting broker due connection loss.")
 
     newb, err := NewBroker(b.settings)
 
