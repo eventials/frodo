@@ -16,10 +16,11 @@ package sse
 
 import (
     "fmt"
-    "log"
     "net"
     "net/http"
     "strings"
+
+    "github.com/eventials/frodo/log"
 )
 
 type Client struct {
@@ -210,11 +211,11 @@ func (es *EventSource) dispatch() {
             if !exists {
                 ch = make(map[*Client]bool)
                 es.channels[c.channel] = ch
-                log.Printf("New channel '%s' created.\n", c.channel)
+                log.Info("New channel '%s' created.", c.channel)
             }
 
             ch[c] = true
-            log.Printf("Client '%s' connected to channel '%s'.\n", c.ip, c.channel)
+            log.Info("Client '%s' connected to channel '%s'.", c.ip, c.channel)
 
         // Client disconnected.
         case c := <- es.removeClient:
@@ -222,12 +223,12 @@ func (es *EventSource) dispatch() {
                 ch[c] = false
                 delete(ch, c)
 
-                log.Printf("Client '%s' disconnected from channel '%s'.\n", c.ip, c.channel)
-                log.Printf("Checking if channel '%s' has clients.\n", c.channel)
+                log.Info("Client '%s' disconnected from channel '%s'.", c.ip, c.channel)
+                log.Info("Checking if channel '%s' has clients.", c.channel)
 
                 if len(ch) == 0 {
                     delete(es.channels, c.channel)
-                    log.Printf("Channel '%s' has no clients. Channel closed.\n", c.channel)
+                    log.Info("Channel '%s' has no clients. Channel closed.", c.channel)
                 }
             }
 
@@ -242,9 +243,9 @@ func (es *EventSource) dispatch() {
                     }
                 }
 
-                log.Printf("Message sent to %d clients on channel '%s'.\n", len(ch), msg.channel)
+                log.Info("Message sent to %d clients on channel '%s'.", len(ch), msg.channel)
             } else {
-                log.Printf("Channel '%s' doesn't exists. Message not sent.\n", len(ch), msg.channel)
+                log.Info("Channel '%s' doesn't exists. Message not sent.", len(ch), msg.channel)
             }
 
         // Close channel and all clients in it.
@@ -259,9 +260,9 @@ func (es *EventSource) dispatch() {
                     close(c.send)
                 }
 
-                log.Printf("Channel '%s' closed.\n", channel)
+                log.Info("Channel '%s' closed.", channel)
             } else {
-                log.Printf("Requested to close channel '%s', but it was already closed.\n", channel)
+                log.Info("Requested to close channel '%s', but it was already closed.", channel)
             }
 
         // Event Source shutdown.
@@ -271,7 +272,7 @@ func (es *EventSource) dispatch() {
             close(es.removeClient)
             close(es.sendMessage)
             close(es.shutdown)
-            log.Println("Event Source server stoped.")
+            log.Info("Event Source server stoped.")
             return
         }
     }

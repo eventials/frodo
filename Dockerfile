@@ -9,3 +9,4 @@ WORKDIR /go/src/github.com/eventials/frodo
 
 RUN go get github.com/gorilla/mux
 RUN go get github.com/streadway/amqp
+RUN go get github.com/getsentry/raven-go
