@@ -5,6 +5,7 @@ go:
 install:
   - go get github.com/gorilla/mux
   - go get github.com/streadway/amqp
+  - go get github.com/getsentry/raven-go
 services:
   - rabbitmq
 env:
