@@ -5,12 +5,10 @@ go:
 install:
   - go get github.com/gorilla/mux
   - go get github.com/streadway/amqp
-  - go get github.com/garyburd/redigo/redis
 services:
   - rabbitmq
-  - redis-server
 env:
-  - AMQP_URL=amqp://guest:guest@127.0.0.1:5672/ REDIS_URL=redis://127.0.0.1:6379/0
+  - AMQP_URL=amqp://guest:guest@127.0.0.1:5672/
 script: go test ./...
 notifications:
   email:
