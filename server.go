@@ -28,8 +28,8 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
     fmt.Fprint(w, "Frodo")
 }
 
-func run(appName, bindAddress, brokerUrl string, allowCors bool) {
-    es := sse.NewEventSource(allowCors)
+func run(appName, bindAddress, brokerUrl string, allowCors, lastMessage bool) {
+    es := sse.NewEventSource(allowCors, lastMessage)
     log.Info("Event Source started.")
     defer es.Shutdown()
 
@@ -120,6 +120,7 @@ func main() {
     bindAddress := flag.String("bind", defaultValue(os.Getenv("FRODO_BIND"), ":3000"), "Bind Address.")
     brokerUrl := flag.String("broker", defaultValue(os.Getenv("FRODO_BROKER"), "amqp://"), "Broker URL.")
     sentryDsn := flag.String("log-sentry", defaultValue(os.Getenv("FRODO_LOG_SENTRY"), ""), "Sentry DSN URl.")
+    lastMessage := flag.Bool("last-message", os.Getenv("FRODO_LAST_MESSAGE") == "true", "Use Last Message.")
 
     flag.Parse()
 
@@ -129,5 +130,5 @@ func main() {
         log.AddHandler("sentry", *sentryDsn)
     }
 
-    run(*appName, *bindAddress, *brokerUrl, *allowCors)
+    run(*appName, *bindAddress, *brokerUrl, *allowCors, *lastMessage)
 }
