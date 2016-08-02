@@ -19,6 +19,8 @@ import (
     "net"
     "net/http"
     "strings"
+    "time"
+    "sync"
 
     "github.com/eventials/frodo/log"
 )
@@ -34,14 +36,23 @@ type eventMessage struct {
     message string
 }
 
+type Channel struct {
+    mutex *sync.Mutex
+    lastMessage string
+    clientsConnected map[*Client]bool
+    expiration int64
+}
+
 type EventSource struct {
     allowCors bool
-    channels map[string]map[*Client]bool
+    channels map[string]*Channel
     addClient chan *Client
     removeClient chan *Client
     sendMessage chan *eventMessage
     shutdown chan bool
     closeChannel chan string
+
+    UseLastMessage bool
 }
 
 func getIP(request *http.Request) string {
@@ -56,6 +67,29 @@ func getIP(request *http.Request) string {
     }
 
     return ""
+}
+
+func (ch *Channel) GetLastMessage() string {
+    return ch.lastMessage
+}
+
+func (ch *Channel) SetLastMessage(message string){
+    ch.lastMessage = message
+}
+
+func (ch *Channel) UpdateExpiration() {
+    ch.mutex.Lock()
+    ch.expiration = time.Now().UnixNano()
+    ch.mutex.Unlock()
+}
+
+func (ch *Channel) Expired() bool {
+    if ch.expiration == 0 {
+        return false
+    }
+    ch.mutex.Lock()
+    defer ch.mutex.Unlock()
+    return (time.Now().UnixNano() - ch.expiration) > (24 * int64(time.Hour))
 }
 
 // SendMessage sends a message to client.
@@ -74,20 +108,45 @@ func (c *Client) IP() string {
 }
 
 // NewEventSource creates a new Event Source.
-func NewEventSource(allowCors bool) *EventSource {
+func NewEventSource(allowCors, lastMessage bool) *EventSource {
     es := &EventSource{
         allowCors,
-        make(map[string]map[*Client]bool),
+        make(map[string]*Channel),
         make(chan *Client),
         make(chan *Client),
         make(chan *eventMessage),
         make(chan bool),
         make(chan string),
+        lastMessage,
     }
 
     go es.dispatch()
 
+    if es.UseLastMessage {
+        go es.ClearChannels()
+    }
+
     return es
+}
+
+func (es *EventSource) ClearChannels() {
+    ticker := time.NewTicker(5 * time.Minute)
+    for {
+        select {
+        case <-ticker.C:
+            es.DeleteExpired()
+        }
+    }
+}
+
+func (es *EventSource) DeleteExpired() {
+    log.Info("Verify expired channels.")
+    for key, ch := range es.channels {
+        if ch.Expired() {
+            log.Info("Channel '%s' expired.", key)
+            es.internalCloseChannel(key)
+        }
+    }
 }
 
 func (es *EventSource) ServeHTTP(response http.ResponseWriter, request *http.Request) {
@@ -142,6 +201,8 @@ func (es *EventSource) SendMessage(channel, message string) {
         }
 
         es.sendMessage <- msg
+    } else {
+        log.Info("Channel '%s' doesn't exists.")
     }
 }
 
@@ -178,8 +239,8 @@ func (es *EventSource) CloseChannels() {
 func (es *EventSource) ConnectionCount() int {
     i := 0
 
-    for _, clients := range es.channels {
-        i += len(clients)
+    for _, channel := range es.channels {
+        i += len(channel.clientsConnected)
     }
 
     return i
@@ -188,7 +249,7 @@ func (es *EventSource) ConnectionCount() int {
 // ConnectionCountPerChannel returns the connection count in selected channel.
 func (es *EventSource) ConnectionCountPerChannel(channel string) int {
     if ch, ok := es.channels[channel]; ok {
-        return len(ch)
+        return len(ch.clientsConnected)
     }
 
     return 0
@@ -197,6 +258,26 @@ func (es *EventSource) ConnectionCountPerChannel(channel string) int {
 // Shutdown performs a graceful shutdown of Event Source.
 func (es *EventSource) Shutdown() {
     es.shutdown <- true
+}
+
+func (es *EventSource) internalCloseChannel(channel string) {
+    log.Info("Closing channel '%s'.", channel)
+    if ch, exists := es.channels[channel]; exists {
+        log.Info("Remove channel from map channels.")
+        delete(es.channels, channel)
+
+        log.Info("Removing %d clients from channel '%s'.", len(ch.clientsConnected), channel)
+        // Kick all clients of this channel.
+        for c, _ := range ch.clientsConnected {
+            ch.clientsConnected[c] = false
+            delete(ch.clientsConnected, c)
+            close(c.send)
+        }
+
+        log.Info("Channel '%s' closed.", channel)
+    } else {
+        log.Info("Requested to close channel '%s', but it was already closed.", channel)
+    }
 }
 
 // dispatch holds all Event Source channels logic.
@@ -209,61 +290,71 @@ func (es *EventSource) dispatch() {
             ch, exists := es.channels[c.channel]
 
             if !exists {
-                ch = make(map[*Client]bool)
+                ch = &Channel{
+                                new(sync.Mutex),
+                                "",
+                                make(map[*Client]bool),
+                                0,
+                            }
                 es.channels[c.channel] = ch
                 log.Info("New channel '%s' created.", c.channel)
             }
 
-            ch[c] = true
+            ch.UpdateExpiration()
+
+            ch.clientsConnected[c] = true
             log.Info("Client '%s' connected to channel '%s'.", c.ip, c.channel)
+            lastMessage := ch.GetLastMessage()
+
+            if (es.UseLastMessage && (len(lastMessage) > 0)) {
+                log.Info("Sending last message %s to client '%s' in channel '%s'.", ch.lastMessage, c.ip, c.channel)
+                c.send <- ch.lastMessage
+            }
 
         // Client disconnected.
         case c := <- es.removeClient:
             if ch, exists := es.channels[c.channel]; exists {
-                ch[c] = false
-                delete(ch, c)
+                ch.UpdateExpiration()
+
+                if _, ok := ch.clientsConnected[c]; ok {
+                    delete(ch.clientsConnected, c)
+                    close(c.send)
+                }
 
                 log.Info("Client '%s' disconnected from channel '%s'.", c.ip, c.channel)
                 log.Info("Checking if channel '%s' has clients.", c.channel)
 
-                if len(ch) == 0 {
-                    delete(es.channels, c.channel)
-                    log.Info("Channel '%s' has no clients. Channel closed.", c.channel)
+                if len(ch.clientsConnected) == 0 {
+                    log.Info("Channel '%s' has no clients. Closing channel.", c.channel)
+                    es.internalCloseChannel(c.channel)
                 }
             }
 
-            close(c.send)
-
         // Broadcast message to all clients in channel.
         case msg := <- es.sendMessage:
+            log.Info("Broadcasting to '%s'", msg.channel)
             if ch, ok := es.channels[msg.channel]; ok {
-                for c, open := range ch {
+                for c, open := range ch.clientsConnected {
                     if open {
                         c.send <- msg.message
                     }
                 }
 
-                log.Info("Message sent to %d clients on channel '%s'.", len(ch), msg.channel)
+                if es.UseLastMessage {
+                    ch.UpdateExpiration()
+
+                    ch.SetLastMessage(msg.message)
+                    log.Info("Saved last message %s to channel '%s'", msg.message, msg.channel)
+                }
+                
+                log.Info("Message sent to %d clients on channel '%s'.", len(ch.clientsConnected), msg.channel)
             } else {
-                log.Info("Channel '%s' doesn't exists. Message not sent.", len(ch), msg.channel)
+                log.Info("Channel '%s' doesn't exists. Message not sent.", msg.channel)
             }
 
         // Close channel and all clients in it.
         case channel := <- es.closeChannel:
-            if ch, exists := es.channels[channel]; exists {
-                delete(es.channels, channel)
-
-                // Kick all clients of this channel.
-                for c, _ := range ch {
-                    ch[c] = false
-                    delete(ch, c)
-                    close(c.send)
-                }
-
-                log.Info("Channel '%s' closed.", channel)
-            } else {
-                log.Info("Requested to close channel '%s', but it was already closed.", channel)
-            }
+            es.internalCloseChannel(channel)
 
         // Event Source shutdown.
         case <- es.shutdown:

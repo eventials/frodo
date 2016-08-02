@@ -97,7 +97,7 @@ func (b *Broker) StartListen() error {
                 var brokerMessage BrokerMessage
 
                 if err = json.Unmarshal(m.Body, &brokerMessage); err == nil {
-                    log.Info("Valid message. Broadcasting...")
+                    log.Info("Valid message. Broadcasting to '%s'...", brokerMessage.Channel)
                     b.Message <- brokerMessage
                 } else {
                     log.Error("Can't decode JSON message: %s", err)
