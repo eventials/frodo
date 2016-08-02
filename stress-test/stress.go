@@ -12,7 +12,7 @@ import (
 
 func main() {
     args := os.Args[1:]
-    var url string = "http://local.eventials.com:3000/talk-channel/123456"
+    var url string = "http://local.eventials.com:3000/talk-state/123456"
     var qtd int = 10
 
     if len(args) > 0 {
