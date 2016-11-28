@@ -28,8 +28,7 @@ The client must know how to use this data.
 ## Go dependencies
 
 ```sh
-go get github.com/gorilla/mux
-go get github.com/streadway/amqp
+govendor sync 
 ```
 
 ## Setup
@@ -53,6 +52,6 @@ there's a default value for each option.
 
 ## Building Docker Image
 
-Just run `docker build -t username/imagename -f Dockerfile.build --no-cache .`.
+Just run `docker build -t username/imagename -f Dockerfile.app.build --no-cache .`.
 
 To publish run `docker push username/imagename`.
