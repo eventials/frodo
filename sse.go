@@ -11,7 +11,7 @@
 //    	http.Handle("/{channel:[a-z0-9-_/]+}", es)
 //
 //		es.SendMessage("channel", "Hello world!")
-package sse
+package frodo
 
 import (
 	"fmt"
