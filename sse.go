@@ -23,6 +23,17 @@ import (
 	"time"
 )
 
+type Log interface {
+	Info(message string)
+}
+
+type defaultLog struct {
+}
+
+func (d *defaultLog) Info(message string) {
+	fmt.Println(message)
+}
+
 type Client struct {
 	channel string
 	ip      string
@@ -42,14 +53,14 @@ type Channel struct {
 }
 
 type EventSource struct {
-	allowCors    bool
-	channels     map[string]*Channel
-	addClient    chan *Client
-	removeClient chan *Client
-	sendMessage  chan *eventMessage
-	shutdown     chan bool
-	closeChannel chan string
-
+	allowCors      bool
+	channels       map[string]*Channel
+	addClient      chan *Client
+	removeClient   chan *Client
+	sendMessage    chan *eventMessage
+	shutdown       chan bool
+	closeChannel   chan string
+	log            Log
 	UseLastMessage bool
 }
 
@@ -105,8 +116,8 @@ func (c *Client) IP() string {
 	return c.ip
 }
 
-// NewEventSource creates a new Event Source.
-func NewEventSource(allowCors, lastMessage bool) *EventSource {
+// NewEventSource creates a new Event Source with config.
+func NewEventSourceConfig(allowCors, lastMessage bool, log Log) *EventSource {
 	es := &EventSource{
 		allowCors,
 		make(map[string]*Channel),
@@ -115,6 +126,7 @@ func NewEventSource(allowCors, lastMessage bool) *EventSource {
 		make(chan *eventMessage),
 		make(chan bool),
 		make(chan string),
+		log,
 		lastMessage,
 	}
 
@@ -125,6 +137,11 @@ func NewEventSource(allowCors, lastMessage bool) *EventSource {
 	}
 
 	return es
+}
+
+// NewEventSource creates a new Event Source.
+func NewEventSource() *EventSource {
+	return NewEventSourceConfig(true, false, &defaultLog{})
 }
 
 func (es *EventSource) ClearChannels() {
@@ -303,11 +320,13 @@ func (es *EventSource) dispatch() {
 					0,
 				}
 				es.channels[c.channel] = ch
+				es.log.Info(fmt.Sprintf("New channel '%s' created.", c.channel))
 			}
 
 			ch.UpdateExpiration()
 
 			ch.clientsConnected[c] = true
+			es.log.Info(fmt.Sprintf("Client '%s' connected to channel '%s'.", c.ip, c.channel))
 			lastMessage := ch.GetLastMessage()
 
 			if es.UseLastMessage && (len(lastMessage) > 0) {
@@ -324,13 +343,16 @@ func (es *EventSource) dispatch() {
 					close(c.send)
 				}
 
+				es.log.Info(fmt.Sprintf("Client '%s' disconnected from channel '%s'.", c.ip, c.channel))
 				if len(ch.clientsConnected) == 0 {
+					es.log.Info(fmt.Sprintf("Channel '%s' has no clients. Closing channel.", c.channel))
 					es.internalCloseChannel(c.channel)
 				}
 			}
 
 		// Broadcast message to all clients in channel.
 		case msg := <-es.sendMessage:
+			es.log.Info(fmt.Sprintf("Broadcasting to '%s'", msg.channel))
 			if ch, ok := es.channels[msg.channel]; ok {
 				for c, open := range ch.clientsConnected {
 					if open {
@@ -343,6 +365,9 @@ func (es *EventSource) dispatch() {
 
 					ch.SetLastMessage(msg.message)
 				}
+				es.log.Info(fmt.Sprintf("Message sent to %d clients on channel '%s'.", len(ch.clientsConnected), msg.channel))
+			} else {
+				es.log.Info(fmt.Sprintf("Channel '%s' doesn't exists. Message not sent.", msg.channel))
 			}
 
 		// Close channel and all clients in it.
@@ -356,6 +381,7 @@ func (es *EventSource) dispatch() {
 			close(es.removeClient)
 			close(es.sendMessage)
 			close(es.shutdown)
+			es.log.Info(fmt.Sprintf("Event Source server stoped."))
 			return
 		}
 	}
