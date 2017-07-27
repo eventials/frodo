@@ -1,9 +1,0 @@
-FROM golang:1.7-alpine
-
-RUN mkdir -p /go/src/github.com/eventials/frodo
-ADD . /go/src/github.com/eventials/frodo
-WORKDIR /go/src/github.com/eventials/frodo
-
-RUN go build -o server .
-CMD ["/go/src/github.com/eventials/frodo/server"]
-

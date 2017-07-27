@@ -21,8 +21,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/eventials/frodo/log"
 )
 
 type Client struct {
@@ -140,10 +138,8 @@ func (es *EventSource) ClearChannels() {
 }
 
 func (es *EventSource) DeleteExpired() {
-	log.Info("Verify expired channels.")
 	for key, ch := range es.channels {
 		if ch.Expired() {
-			log.Info("Channel '%s' expired.", key)
 			es.internalCloseChannel(key)
 		}
 	}
@@ -204,7 +200,6 @@ func (es *EventSource) ServeHTTP(response http.ResponseWriter, request *http.Req
 					flusher.Flush()
 				}
 			case <-done:
-				log.Info("Http request from client '%s' has finished", c.ip)
 				return
 			}
 		}
@@ -220,8 +215,6 @@ func (es *EventSource) SendMessage(channel, message string) {
 		}
 
 		es.sendMessage <- msg
-	} else {
-		log.Info("Channel '%s' doesn't exists.")
 	}
 }
 
@@ -280,12 +273,9 @@ func (es *EventSource) Shutdown() {
 }
 
 func (es *EventSource) internalCloseChannel(channel string) {
-	log.Info("Closing channel '%s'.", channel)
 	if ch, exists := es.channels[channel]; exists {
-		log.Info("Remove channel from map channels.")
 		delete(es.channels, channel)
 
-		log.Info("Removing %d clients from channel '%s'.", len(ch.clientsConnected), channel)
 		// Kick all clients of this channel.
 		for c, _ := range ch.clientsConnected {
 			ch.clientsConnected[c] = false
@@ -293,9 +283,6 @@ func (es *EventSource) internalCloseChannel(channel string) {
 			close(c.send)
 		}
 
-		log.Info("Channel '%s' closed.", channel)
-	} else {
-		log.Info("Requested to close channel '%s', but it was already closed.", channel)
 	}
 }
 
@@ -316,17 +303,14 @@ func (es *EventSource) dispatch() {
 					0,
 				}
 				es.channels[c.channel] = ch
-				log.Info("New channel '%s' created.", c.channel)
 			}
 
 			ch.UpdateExpiration()
 
 			ch.clientsConnected[c] = true
-			log.Info("Client '%s' connected to channel '%s'.", c.ip, c.channel)
 			lastMessage := ch.GetLastMessage()
 
 			if es.UseLastMessage && (len(lastMessage) > 0) {
-				log.Info("Sending last message %s to client '%s' in channel '%s'.", ch.lastMessage, c.ip, c.channel)
 				c.send <- ch.lastMessage
 			}
 
@@ -340,18 +324,13 @@ func (es *EventSource) dispatch() {
 					close(c.send)
 				}
 
-				log.Info("Client '%s' disconnected from channel '%s'.", c.ip, c.channel)
-				log.Info("Checking if channel '%s' has clients.", c.channel)
-
 				if len(ch.clientsConnected) == 0 {
-					log.Info("Channel '%s' has no clients. Closing channel.", c.channel)
 					es.internalCloseChannel(c.channel)
 				}
 			}
 
 		// Broadcast message to all clients in channel.
 		case msg := <-es.sendMessage:
-			log.Info("Broadcasting to '%s'", msg.channel)
 			if ch, ok := es.channels[msg.channel]; ok {
 				for c, open := range ch.clientsConnected {
 					if open {
@@ -363,12 +342,7 @@ func (es *EventSource) dispatch() {
 					ch.UpdateExpiration()
 
 					ch.SetLastMessage(msg.message)
-					log.Info("Saved last message %s to channel '%s'", msg.message, msg.channel)
 				}
-
-				log.Info("Message sent to %d clients on channel '%s'.", len(ch.clientsConnected), msg.channel)
-			} else {
-				log.Info("Channel '%s' doesn't exists. Message not sent.", msg.channel)
 			}
 
 		// Close channel and all clients in it.
@@ -382,7 +356,6 @@ func (es *EventSource) dispatch() {
 			close(es.removeClient)
 			close(es.sendMessage)
 			close(es.shutdown)
-			log.Info("Event Source server stoped.")
 			return
 		}
 	}
