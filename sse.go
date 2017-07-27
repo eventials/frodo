@@ -1,17 +1,16 @@
-// Package sse implements an Event Source that supports multiple channels.
+// Frodo implements an Event Source that supports multiple channels.
 //
 // Examples
 //
-// Basic usage of sse package.
+// Basic usage of Frodo.
 //
-//    es := sse.NewEventSource(func (c sse.Client) {
-//        c.SendMessage(fmt.Sprintf("Greetings %s!", c.IP()))
-//    }, nil)
+//    	es := frodo.NewEventSource()
 //
-//    defer es.Shutdown()
+//    	defer es.Shutdown()
 //
-//    http.Handle("/events/", es)
+//    	http.Handle("/{channel:[a-z0-9-_/]+}", es)
 //
+//		es.SendMessage("channel", "Hello world!")
 package sse
 
 import (
@@ -21,9 +20,16 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/eventials/frodo/log"
 )
+
+type Log interface {
+	Info(message string, args ...interface{})
+}
+
+type defaultLog struct {
+}
+
+func (d *defaultLog) Info(message string, args ...interface{}) {}
 
 type Client struct {
 	channel string
@@ -44,14 +50,14 @@ type Channel struct {
 }
 
 type EventSource struct {
-	allowCors    bool
-	channels     map[string]*Channel
-	addClient    chan *Client
-	removeClient chan *Client
-	sendMessage  chan *eventMessage
-	shutdown     chan bool
-	closeChannel chan string
-
+	allowCors      bool
+	channels       map[string]*Channel
+	addClient      chan *Client
+	removeClient   chan *Client
+	sendMessage    chan *eventMessage
+	shutdown       chan bool
+	closeChannel   chan string
+	log            Log
 	UseLastMessage bool
 }
 
@@ -107,8 +113,8 @@ func (c *Client) IP() string {
 	return c.ip
 }
 
-// NewEventSource creates a new Event Source.
-func NewEventSource(allowCors, lastMessage bool) *EventSource {
+// NewEventSource creates a new Event Source with config.
+func NewEventSourceConfig(allowCors, lastMessage bool, log Log) *EventSource {
 	es := &EventSource{
 		allowCors,
 		make(map[string]*Channel),
@@ -117,6 +123,7 @@ func NewEventSource(allowCors, lastMessage bool) *EventSource {
 		make(chan *eventMessage),
 		make(chan bool),
 		make(chan string),
+		log,
 		lastMessage,
 	}
 
@@ -127,6 +134,11 @@ func NewEventSource(allowCors, lastMessage bool) *EventSource {
 	}
 
 	return es
+}
+
+// NewEventSource creates a new Event Source.
+func NewEventSource() *EventSource {
+	return NewEventSourceConfig(true, false, &defaultLog{})
 }
 
 func (es *EventSource) ClearChannels() {
@@ -140,10 +152,8 @@ func (es *EventSource) ClearChannels() {
 }
 
 func (es *EventSource) DeleteExpired() {
-	log.Info("Verify expired channels.")
 	for key, ch := range es.channels {
 		if ch.Expired() {
-			log.Info("Channel '%s' expired.", key)
 			es.internalCloseChannel(key)
 		}
 	}
@@ -204,7 +214,6 @@ func (es *EventSource) ServeHTTP(response http.ResponseWriter, request *http.Req
 					flusher.Flush()
 				}
 			case <-done:
-				log.Info("Http request from client '%s' has finished", c.ip)
 				return
 			}
 		}
@@ -220,8 +229,6 @@ func (es *EventSource) SendMessage(channel, message string) {
 		}
 
 		es.sendMessage <- msg
-	} else {
-		log.Info("Channel '%s' doesn't exists.")
 	}
 }
 
@@ -280,12 +287,9 @@ func (es *EventSource) Shutdown() {
 }
 
 func (es *EventSource) internalCloseChannel(channel string) {
-	log.Info("Closing channel '%s'.", channel)
 	if ch, exists := es.channels[channel]; exists {
-		log.Info("Remove channel from map channels.")
 		delete(es.channels, channel)
 
-		log.Info("Removing %d clients from channel '%s'.", len(ch.clientsConnected), channel)
 		// Kick all clients of this channel.
 		for c, _ := range ch.clientsConnected {
 			ch.clientsConnected[c] = false
@@ -293,9 +297,6 @@ func (es *EventSource) internalCloseChannel(channel string) {
 			close(c.send)
 		}
 
-		log.Info("Channel '%s' closed.", channel)
-	} else {
-		log.Info("Requested to close channel '%s', but it was already closed.", channel)
 	}
 }
 
@@ -316,17 +317,16 @@ func (es *EventSource) dispatch() {
 					0,
 				}
 				es.channels[c.channel] = ch
-				log.Info("New channel '%s' created.", c.channel)
+				es.log.Info("New channel '%s' created.", c.channel)
 			}
 
 			ch.UpdateExpiration()
 
 			ch.clientsConnected[c] = true
-			log.Info("Client '%s' connected to channel '%s'.", c.ip, c.channel)
+			es.log.Info("Client '%s' connected to channel '%s'.", c.ip, c.channel)
 			lastMessage := ch.GetLastMessage()
 
 			if es.UseLastMessage && (len(lastMessage) > 0) {
-				log.Info("Sending last message %s to client '%s' in channel '%s'.", ch.lastMessage, c.ip, c.channel)
 				c.send <- ch.lastMessage
 			}
 
@@ -340,18 +340,16 @@ func (es *EventSource) dispatch() {
 					close(c.send)
 				}
 
-				log.Info("Client '%s' disconnected from channel '%s'.", c.ip, c.channel)
-				log.Info("Checking if channel '%s' has clients.", c.channel)
-
+				es.log.Info("Client '%s' disconnected from channel '%s'.", c.ip, c.channel)
 				if len(ch.clientsConnected) == 0 {
-					log.Info("Channel '%s' has no clients. Closing channel.", c.channel)
+					es.log.Info("Channel '%s' has no clients. Closing channel.", c.channel)
 					es.internalCloseChannel(c.channel)
 				}
 			}
 
 		// Broadcast message to all clients in channel.
 		case msg := <-es.sendMessage:
-			log.Info("Broadcasting to '%s'", msg.channel)
+			es.log.Info("Broadcasting to '%s'", msg.channel)
 			if ch, ok := es.channels[msg.channel]; ok {
 				for c, open := range ch.clientsConnected {
 					if open {
@@ -363,12 +361,10 @@ func (es *EventSource) dispatch() {
 					ch.UpdateExpiration()
 
 					ch.SetLastMessage(msg.message)
-					log.Info("Saved last message %s to channel '%s'", msg.message, msg.channel)
 				}
-
-				log.Info("Message sent to %d clients on channel '%s'.", len(ch.clientsConnected), msg.channel)
+				es.log.Info("Message sent to %d clients on channel '%s'.", len(ch.clientsConnected), msg.channel)
 			} else {
-				log.Info("Channel '%s' doesn't exists. Message not sent.", msg.channel)
+				es.log.Info("Channel '%s' doesn't exists. Message not sent.", msg.channel)
 			}
 
 		// Close channel and all clients in it.
@@ -382,7 +378,7 @@ func (es *EventSource) dispatch() {
 			close(es.removeClient)
 			close(es.sendMessage)
 			close(es.shutdown)
-			log.Info("Event Source server stoped.")
+			es.log.Info("Event Source server stoped.")
 			return
 		}
 	}

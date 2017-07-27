@@ -5,53 +5,10 @@ Event Source Multiplexer
 
 ## About
 
-Frodo is a dummy Event Source server. It only route messages from a broker to a channel over server-sent events.
+Frodo is a dummy Event Source server.
 
-Frodo uses AMQP protocol to receive messages and send it to a client. The message must be a valid JSON object, as below:
-
-```js
-{
-    "channel": "/events/my-channel",
-    "data": "some stuff"
-}
-```
 
 The `channel` key must match a valid channel, or the message will be skipped.
 The `data` key can be any valid JSON object.
 This value is by-pass, so, Frodo won't take a look into it, it will just publish in the channel.
 The client must know how to use this data.
-
-## Requirements
-
-- RabbitMQ or any other AMQP 0.9.1 broker
-
-## Go dependencies
-
-```sh
-govendor sync 
-```
-
-## Setup
-
-For easy use, there's a Dockerfile to speed up things.
-Just run `docker-composer up` and enjoy.
-
-## Configuration
-
-There's two ways to configure things, thought command line argumens or environment variables.
-
-Command line arguments are priority if set, if not use environment variables, and if none available,
-there's a default value for each option.
-
-| Option       | CL Argument | Env Var  | Default                    |
-|:-------------|:-------- |:-------------|:---------------------------|
-| Allow CORS   | -cors   | FRODO_CORS   | `false`                    |
-| App Name     | -appname | FRODO_NAME   | `frodo`                    |
-| Bind Address | -bind    | FRODO_BIND   | `:3000`                    |
-| Broker URL   | -broker  | FRODO_BROKER | `amqp://`                  |
-
-## Building Docker Image
-
-Just run `docker build -t username/imagename -f Dockerfile.app.build --no-cache .`.
-
-To publish run `docker push username/imagename`.
