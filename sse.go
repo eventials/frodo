@@ -1,17 +1,16 @@
-// Package sse implements an Event Source that supports multiple channels.
+// Frodo implements an Event Source that supports multiple channels.
 //
 // Examples
 //
-// Basic usage of sse package.
+// Basic usage of Frodo.
 //
-//    es := sse.NewEventSource(func (c sse.Client) {
-//        c.SendMessage(fmt.Sprintf("Greetings %s!", c.IP()))
-//    }, nil)
+//    	es := frodo.NewEventSource()
 //
-//    defer es.Shutdown()
+//    	defer es.Shutdown()
 //
-//    http.Handle("/events/", es)
+//    	http.Handle("/{channel:[a-z0-9-_/]+}", es)
 //
+//		es.SendMessage("channel", "Hello world!")
 package sse
 
 import (
@@ -24,15 +23,13 @@ import (
 )
 
 type Log interface {
-	Info(message string)
+	Info(message string, args ...interface{})
 }
 
 type defaultLog struct {
 }
 
-func (d *defaultLog) Info(message string) {
-	fmt.Println(message)
-}
+func (d *defaultLog) Info(message string, args ...interface{}) {}
 
 type Client struct {
 	channel string
@@ -320,13 +317,13 @@ func (es *EventSource) dispatch() {
 					0,
 				}
 				es.channels[c.channel] = ch
-				es.log.Info(fmt.Sprintf("New channel '%s' created.", c.channel))
+				es.log.Info("New channel '%s' created.", c.channel)
 			}
 
 			ch.UpdateExpiration()
 
 			ch.clientsConnected[c] = true
-			es.log.Info(fmt.Sprintf("Client '%s' connected to channel '%s'.", c.ip, c.channel))
+			es.log.Info("Client '%s' connected to channel '%s'.", c.ip, c.channel)
 			lastMessage := ch.GetLastMessage()
 
 			if es.UseLastMessage && (len(lastMessage) > 0) {
@@ -343,9 +340,9 @@ func (es *EventSource) dispatch() {
 					close(c.send)
 				}
 
-				es.log.Info(fmt.Sprintf("Client '%s' disconnected from channel '%s'.", c.ip, c.channel))
+				es.log.Info("Client '%s' disconnected from channel '%s'.", c.ip, c.channel)
 				if len(ch.clientsConnected) == 0 {
-					es.log.Info(fmt.Sprintf("Channel '%s' has no clients. Closing channel.", c.channel))
+					es.log.Info("Channel '%s' has no clients. Closing channel.", c.channel)
 					es.internalCloseChannel(c.channel)
 				}
 			}
@@ -365,9 +362,9 @@ func (es *EventSource) dispatch() {
 
 					ch.SetLastMessage(msg.message)
 				}
-				es.log.Info(fmt.Sprintf("Message sent to %d clients on channel '%s'.", len(ch.clientsConnected), msg.channel))
+				es.log.Info("Message sent to %d clients on channel '%s'.", len(ch.clientsConnected), msg.channel)
 			} else {
-				es.log.Info(fmt.Sprintf("Channel '%s' doesn't exists. Message not sent.", msg.channel))
+				es.log.Info("Channel '%s' doesn't exists. Message not sent.", msg.channel)
 			}
 
 		// Close channel and all clients in it.
@@ -381,7 +378,7 @@ func (es *EventSource) dispatch() {
 			close(es.removeClient)
 			close(es.sendMessage)
 			close(es.shutdown)
-			es.log.Info(fmt.Sprintf("Event Source server stoped."))
+			es.log.Info("Event Source server stoped.")
 			return
 		}
 	}
