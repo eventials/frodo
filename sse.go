@@ -349,7 +349,7 @@ func (es *EventSource) dispatch() {
 
 		// Broadcast message to all clients in channel.
 		case msg := <-es.sendMessage:
-			es.log.Info(fmt.Sprintf("Broadcasting to '%s'", msg.channel))
+			es.log.Info("Broadcasting to '%s'", msg.channel)
 			if ch, ok := es.channels[msg.channel]; ok {
 				for c, open := range ch.clientsConnected {
 					if open {
