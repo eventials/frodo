@@ -228,7 +228,13 @@ func (es *EventSource) SendMessage(channel, message string) {
 			message,
 		}
 
+		es.log.Info("Adding message '%s' to the sendMessage channel '%s'.", message, channel)
+
 		es.sendMessage <- msg
+
+		es.log.Info("Added message '%s' to the sendMessage channel '%s'.", message, channel)
+	} else {
+		es.log.Info("Channel does not exists '%s'.", channel)
 	}
 }
 
