@@ -154,6 +154,7 @@ func (es *EventSource) ClearChannels() {
 func (es *EventSource) DeleteExpired() {
 	for key, ch := range es.channels {
 		if ch.Expired() {
+			es.log.Info("Channel '%s' has just expired.", key)
 			es.internalCloseChannel(key)
 		}
 	}
@@ -222,20 +223,16 @@ func (es *EventSource) ServeHTTP(response http.ResponseWriter, request *http.Req
 
 // SendMessage broadcast a message to all clients in a channel.
 func (es *EventSource) SendMessage(channel, message string) {
-	if es.ChannelExists(channel) {
-		msg := &eventMessage{
-			channel,
-			message,
-		}
-
-		es.log.Info("Adding message '%s' to the sendMessage channel '%s'.", message, channel)
-
-		es.sendMessage <- msg
-
-		es.log.Info("Added message '%s' to the sendMessage channel '%s'.", message, channel)
-	} else {
-		es.log.Info("Channel does not exists '%s'.", channel)
+	msg := &eventMessage{
+		channel,
+		message,
 	}
+
+	es.log.Info("Adding message '%s' to the sendMessage channel '%s'.", message, channel)
+
+	es.sendMessage <- msg
+
+	es.log.Info("Added message '%s' to the sendMessage channel '%s'.", message, channel)
 }
 
 // Channels returns all opened channels name, or an empty array if none open.
@@ -293,7 +290,11 @@ func (es *EventSource) Shutdown() {
 }
 
 func (es *EventSource) internalCloseChannel(channel string) {
+	es.log.Info("Internal close channel '%s'.", channel)
+
 	if ch, exists := es.channels[channel]; exists {
+		es.log.Info("Channel deleted '%s'.", channel)
+
 		delete(es.channels, channel)
 
 		// Kick all clients of this channel.
@@ -375,6 +376,7 @@ func (es *EventSource) dispatch() {
 
 		// Close channel and all clients in it.
 		case channel := <-es.closeChannel:
+			es.log.Info("Channel '%s' about to get closed.", channel)
 			es.internalCloseChannel(channel)
 
 		// Event Source shutdown.
