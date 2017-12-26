@@ -356,22 +356,24 @@ func (es *EventSource) dispatch() {
 
 		// Broadcast message to all clients in channel.
 		case msg := <-es.sendMessage:
-			es.log.Info("Broadcasting to '%s'", msg.channel)
+			es.log.Info("Broadcasting '%s' to '%s'",msg.message, msg.channel)
+			openClients := 0
 			if ch, ok := es.channels[msg.channel]; ok {
 				for c, open := range ch.clientsConnected {
 					if open {
+						openClients++
 						c.send <- msg.message
 					}
 				}
 
 				if es.UseLastMessage {
 					ch.UpdateExpiration()
-
 					ch.SetLastMessage(msg.message)
 				}
-				es.log.Info("Message sent to %d clients on channel '%s'.", len(ch.clientsConnected), msg.channel)
+
+				es.log.Info("Message sent to %d open of %d connected clients on channel '%s'.", openClients, len(ch.clientsConnected), msg.channel)
 			} else {
-				es.log.Info("Channel '%s' doesn't exists. Message not sent.", msg.channel)
+				es.log.Info("Channel '%s' doesn't exists. Message '%s' not sent.", msg.channel, msg.message)
 			}
 
 		// Close channel and all clients in it.
